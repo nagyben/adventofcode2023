@@ -5,9 +5,35 @@ fn main() {
     // read the input file
     let input = include_str!("../input.txt");
     println!("Part 1: {}", part_1(input));
+    println!("Part 2: {}", part_2(input));
 }
 
 fn parse_calibration_values(input: &str) -> Vec<i32> {
+    let mut calibration_values = Vec::new();
+    let mut first_digit = 0;
+    let mut second_digit = 0;
+    for line in input.lines() {
+        // scan from left to right until we find a digit
+        for c in line.chars() {
+            if c.is_ascii_digit() {
+                first_digit = c.to_digit(10).unwrap() as i32;
+                break;
+            }
+        }
+
+        // scan from right to left until we find a digit
+        for c in line.chars().rev() {
+            if c.is_ascii_digit() {
+                second_digit = c.to_digit(10).unwrap() as i32;
+                break;
+            }
+        }
+        calibration_values.push(first_digit * 10 + second_digit);
+    }
+    calibration_values
+}
+
+fn parse_calibration_values_with_text(input: &str) -> Vec<i32> {
     let mut calibration_values = Vec::new();
     let mut first_digit: i32;
     let mut second_digit: i32;
@@ -31,7 +57,7 @@ enum ParseDigit {
 fn parse_line(input: &str, parse_digit: ParseDigit) -> IResult<&str, &str> {
     let mut i = input;
     let mut current = "";
-    while i.len() > 0 {
+    while !i.is_empty() {
         let h: IResult<&str, &str> = alt((
             tag("1"),
             tag("2"),
@@ -57,6 +83,8 @@ fn parse_line(input: &str, parse_digit: ParseDigit) -> IResult<&str, &str> {
             Ok((_, o)) => match parse_digit {
                 ParseDigit::First => return Ok((i, o)),
                 ParseDigit::Last => {
+                    // store the current last parsed digit
+                    // and parse again starting from the next character
                     current = o;
                     i = &i[1..];
                 }
@@ -87,6 +115,11 @@ fn part_1(input: &str) -> i32 {
     calibration_values.iter().sum()
 }
 
+fn part_2(input: &str) -> i32 {
+    let calibration_values = parse_calibration_values_with_text(input);
+    calibration_values.iter().sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,7 +145,7 @@ zoneight234
     #[test]
     fn test_parse_2() {
         assert_eq!(
-            parse_calibration_values(INPUT_2),
+            parse_calibration_values_with_text(INPUT_2),
             vec![29, 83, 13, 24, 42, 14, 76]
         );
     }
@@ -124,6 +157,6 @@ zoneight234
 
     #[test]
     fn test_example_2() {
-        assert_eq!(part_1(INPUT_2), 281);
+        assert_eq!(part_2(INPUT_2), 281);
     }
 }
