@@ -1,87 +1,132 @@
+use std::{cmp::max, collections::HashMap};
+
 use nom::{
     bytes::complete::tag,
-    character::complete::{alpha1, digit1, space0, space1},
-    combinator::{map_res, opt},
+    character::complete::{alpha1, digit1, line_ending, space1},
+    combinator::map_res,
     multi::separated_list1,
-    sequence::separated_pair,
+    sequence::preceded,
     IResult,
 };
 
 fn main() {
-    println!("Hello, world!");
+    let input = include_str!("../input.txt");
+    let cube_limits = HashMap::from([(Color::Red, 12), (Color::Green, 13), (Color::Blue, 14)]);
+    println!(
+        "Part 1: {:?}",
+        possible_games(input, &cube_limits).iter().sum::<usize>()
+    );
+    println!("Part 2: {:?}", cube_power(input));
 }
 
 #[derive(Debug, PartialEq)]
 struct Game {
     id: usize,
-    cube_sets: Vec<CubeSet>,
+    rounds: Vec<Round>,
 }
 
 impl Game {
-    // we can use this method with other nom combinator parsers
+    // Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
     fn parse(input: &str) -> IResult<&str, Self> {
-        dbg!(input);
-        let (input, _) = tag("Game ")(input)?; // trim "Game: " from the beginning
-        let (input, id) = map_res(digit1, |d: &str| d.parse())(input)?; // parse the game number
-        let (input, _) = space0(input)?; // trim any whitespace after the game number
-        let (input, _) = tag(": ")(input)?; // trim "Game: " from the beginning
-        
-        let (input, cube_sets) = separated_list1(tag(";"), alpha1)(input)?;
-        let (input, cube_sets) = separated_list1(tag(";"), CubeSet::parse)(input)?;
+        let (input, id) = map_res(preceded(tag("Game "), digit1), |d: &str| d.parse())(input)?;
+        let (input, rounds) = preceded(tag(": "), separated_list1(tag("; "), Round::parse))(input)?;
+        Ok((input, Game { id: id, rounds }))
+    }
+
+    fn is_possible(&self, cube_limits: &HashMap<Color, usize>) -> bool {
+        self.rounds.iter().all(|r| {
+            r.cubes
+                .iter()
+                .all(|c| c.count <= *cube_limits.get(&c.color).unwrap_or(&(0 as usize)))
+        })
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct Round {
+    cubes: Vec<Cube>,
+}
+
+#[derive(Debug, PartialEq)]
+struct Cube {
+    color: Color,
+    count: usize,
+}
+
+impl Cube {
+    // 3 blue
+    fn parse(input: &str) -> IResult<&str, Self> {
+        let (input, count) = map_res(digit1, |d: &str| d.parse())(input)?;
+        let (input, color) = preceded(space1, alpha1)(input)?;
         Ok((
             input,
-            Game {
-                id: id,
-                cube_sets: cube_sets,
+            Cube {
+                color: Color::parse(color),
+                count: count,
             },
         ))
     }
 }
 
-#[derive(Debug, PartialEq)]
-struct CubeSet {
-    red: usize,
-    green: usize,
-    blue: usize,
+#[derive(Debug, PartialEq, Hash, Eq, Clone)]
+enum Color {
+    Red,
+    Green,
+    Blue,
 }
 
-impl CubeSet {
-    // we can use this method with other nom combinator parsers
-    fn parse(input: &str) -> IResult<&str, Self> {
-        // input string gonna look like "1 red, 2 green, 6 blue"
-        // although the order of the colors is not guaranteed
-        // and not all colors are guaranteed to be present
-        let mut red = 0;
-        let mut green = 0;
-        let mut blue = 0;
-        let mut input = input;
-
-        dbg!(input);
-        while !input.is_empty() {
-            let i = input;
-            let (i, _) = space0(i)?; // trim leading whitespace if any
-            let (i, _) = opt(tag(","))(i)?; // trim commas if any
-            let (i, _) = space0(i)?; // trim remaining whitespace if any
-            let (i, (count, color)) = separated_pair(digit1, space1, alpha1)(i)?; // parse the count
-            input = i;
-
-            match color {
-                "red" => red = count.parse().unwrap(),
-                "green" => green = count.parse().unwrap(),
-                "blue" => blue = count.parse().unwrap(),
-                _ => panic!("unexpected color"),
-            }
+impl Color {
+    fn parse(input: &str) -> Self {
+        match input {
+            "red" => Color::Red,
+            "green" => Color::Green,
+            "blue" => Color::Blue,
+            _ => panic!("Unknown color {}", input),
         }
-
-        Ok((input, CubeSet { red, green, blue }))
     }
 }
 
-fn possible_games(input: &str) -> Vec<usize> {
-    let (_, games) = separated_list1(tag("\n"), Game::parse)(input).unwrap();
-    let mut possible_games = Vec::new();
+impl Round {
+    // 3 blue, 4 red
+    fn parse(input: &str) -> IResult<&str, Self> {
+        let (input, cubes) = separated_list1(tag(", "), Cube::parse)(input)?;
+        Ok((input, Round { cubes }))
+    }
+}
 
-    possible_games
+fn possible_games(input: &str, cube_limits: &HashMap<Color, usize>) -> Vec<usize> {
+    let (_, games) = separated_list1(line_ending, Game::parse)(input).unwrap();
+    games
+        .iter()
+        .filter(|g| g.is_possible(cube_limits))
+        .map(|g| g.id)
+        .collect()
+}
+
+fn fewest_cubes(input: &str) -> Vec<HashMap<Color, usize>> {
+    let (_, games) = separated_list1(line_ending, Game::parse)(input).unwrap();
+    let mut cube_limits =
+        vec![HashMap::from([(Color::Red, 0), (Color::Green, 0), (Color::Blue, 0)]); games.len()];
+    for (i, game) in games.iter().enumerate() {
+        for round in &game.rounds {
+            for cube in &round.cubes {
+                let color = cube.color.clone();
+                let count = cube.count;
+                let mut limits = cube_limits[i].clone();
+                *limits.entry(color).or_insert(0) = max(count, *limits.get(&color).unwrap_or(&0));
+                cube_limits[i] = limits;
+            }
+        }
+    }
+    cube_limits
+}
+
+fn cube_power(input: &str) -> usize {
+    let fewest_cubes = fewest_cubes(input);
+    fewest_cubes
+        .iter()
+        .map(|c| c.values().product::<usize>())
+        .sum()
 }
 
 #[cfg(test)]
@@ -96,68 +141,17 @@ Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green"#;
 
     #[test]
     fn test_example_1() {
-        assert_eq!(possible_games(EXAMPLE_1), [1, 2, 5]);
+        assert_eq!(
+            possible_games(
+                EXAMPLE_1,
+                &HashMap::from([(Color::Red, 12), (Color::Green, 13), (Color::Blue, 14)])
+            ),
+            [1, 2, 5]
+        )
     }
 
     #[test]
-    fn test_cubeset_parse() {
-        assert_eq!(
-            CubeSet::parse("1 red, 2 green, 6 blue").unwrap().1,
-            CubeSet {
-                red: 1,
-                green: 2,
-                blue: 6
-            }
-        );
-        assert_eq!(
-            CubeSet::parse("1 red, 2 green").unwrap().1,
-            CubeSet {
-                red: 1,
-                green: 2,
-                blue: 0
-            }
-        );
-        assert_eq!(
-            CubeSet::parse("1 red, 6 blue").unwrap().1,
-            CubeSet {
-                red: 1,
-                green: 0,
-                blue: 6
-            }
-        );
-        assert_eq!(
-            CubeSet::parse("2 green, 6 blue").unwrap().1,
-            CubeSet {
-                red: 0,
-                green: 2,
-                blue: 6
-            }
-        );
-        assert_eq!(
-            CubeSet::parse("1 red").unwrap().1,
-            CubeSet {
-                red: 1,
-                green: 0,
-                blue: 0
-            }
-        );
-        assert_eq!(
-            CubeSet::parse("2 green").unwrap().1,
-            CubeSet {
-                red: 0,
-                green: 2,
-                blue: 0
-            }
-        );
-        assert_eq!(
-            CubeSet::parse("6 blue").unwrap().1,
-            CubeSet {
-                red: 0,
-                green: 0,
-                blue: 6
-            }
-        );
-    }
+    fn test_round_parse() {}
     #[test]
     fn test_game_parse() {
         assert_eq!(
@@ -166,24 +160,62 @@ Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green"#;
                 .1,
             Game {
                 id: 1,
-                cube_sets: vec![
-                    CubeSet {
-                        red: 4,
-                        green: 0,
-                        blue: 3
+                rounds: vec![
+                    Round {
+                        cubes: vec![
+                            Cube {
+                                color: Color::Blue,
+                                count: 3
+                            },
+                            Cube {
+                                color: Color::Red,
+                                count: 4
+                            }
+                        ]
                     },
-                    CubeSet {
-                        red: 1,
-                        green: 2,
-                        blue: 6
+                    Round {
+                        cubes: vec![
+                            Cube {
+                                color: Color::Red,
+                                count: 1
+                            },
+                            Cube {
+                                color: Color::Green,
+                                count: 2
+                            },
+                            Cube {
+                                color: Color::Blue,
+                                count: 6
+                            }
+                        ]
                     },
-                    CubeSet {
-                        red: 0,
-                        green: 2,
-                        blue: 0
+                    Round {
+                        cubes: vec![Cube {
+                            color: Color::Green,
+                            count: 2
+                        }]
                     }
                 ]
             }
         );
+    }
+
+    #[test]
+    fn test_fewest_cubes() {
+        assert_eq!(
+            fewest_cubes(EXAMPLE_1,),
+            vec![
+                HashMap::from([(Color::Red, 4), (Color::Green, 2), (Color::Blue, 6)]),
+                HashMap::from([(Color::Red, 1), (Color::Green, 3), (Color::Blue, 4)]),
+                HashMap::from([(Color::Red, 20), (Color::Green, 13), (Color::Blue, 6)]),
+                HashMap::from([(Color::Red, 14), (Color::Green, 3), (Color::Blue, 15)]),
+                HashMap::from([(Color::Red, 6), (Color::Green, 3), (Color::Blue, 2)]),
+            ]
+        )
+    }
+
+    #[test]
+    fn test_cube_power() {
+        assert_eq!(cube_power(EXAMPLE_1), 2286)
     }
 }
