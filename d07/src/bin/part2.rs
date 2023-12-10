@@ -37,12 +37,17 @@ fn get_hand_type(cards: &Vec<char>, cards_map: &HashMap<char, usize>) -> HandTyp
     card_counts.sort_unstable_by(|a, b| b.1.cmp(&a.1));
 
     // get the number of jokers and add them to the count of the highest card
-    let jokers = cards_map.get(&'J').or(Some(&0)).unwrap();
+    let jokers = cards_map.get(&'J').or(Some(&0)).unwrap().clone();
 
     let mut cards_map_jokers = cards_map.clone();
     let mut cards_jokers = cards.clone();
-    if jokers > &0 {
-        let highest_card = card_counts[0].0;
+    if jokers > 0 && jokers < 5 {
+        let mut highest_card = card_counts[0].0;
+
+        // if the highest card count is a joker then we take the next highest card
+        if highest_card == 'J' && card_counts.len() > 1 {
+            highest_card = card_counts[1].0;
+        }
         cards_map_jokers
             .entry(highest_card)
             .and_modify(|v| *v += jokers)
@@ -56,8 +61,6 @@ fn get_hand_type(cards: &Vec<char>, cards_map: &HashMap<char, usize>) -> HandTyp
     }
 
     let mut counts = [0; 5];
-    dbg!(&cards_jokers);
-    dbg!(&cards_map_jokers);
     cards_jokers.iter().enumerate().for_each(|(idx, c)| {
         counts[idx] = *cards_map_jokers.get(c).unwrap();
     });
