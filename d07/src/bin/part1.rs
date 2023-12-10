@@ -7,7 +7,7 @@ use nom::{
     IResult,
 };
 fn main() {
-    let input = include_str!("../input.txt");
+    let input = include_str!("../../input.txt");
     println!("Part 1: {}", part1(input));
 }
 
@@ -157,8 +157,6 @@ fn parse_hands(input: &str) -> IResult<&str, Vec<Hand>> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use super::*;
 
     const EXAMPLE: &str = r#"32T3K 765
@@ -250,8 +248,6 @@ QQQQQ 483"#;
             Hand::parse("QQQQA 483").unwrap().1,
             Hand::parse("QQQQQ 483").unwrap().1,
         ];
-        dbg!(&hands.iter().map(|h| &h.cards).collect::<Vec<_>>());
-        dbg!(&expected.iter().map(|h| &h.cards).collect::<Vec<_>>());
         assert_eq!(hands, expected);
     }
 }
