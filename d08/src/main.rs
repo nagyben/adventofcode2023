@@ -1,8 +1,8 @@
-use std::{collections::HashMap, thread::current};
+use std::collections::HashMap;
 
 use nom::{
     bytes::complete::tag,
-    character::complete::{alpha1, line_ending},
+    character::complete::{alpha1, alphanumeric1, line_ending},
     multi::separated_list1,
     sequence::{preceded, separated_pair, terminated},
     IResult,
@@ -11,6 +11,7 @@ use nom::{
 fn main() {
     let input = include_str!("../input.txt");
     println!("Part 1: {}", part1(input));
+    println!("Part 2: {}", part2(input));
 }
 
 type Instructions = Vec<char>;
@@ -27,11 +28,11 @@ fn parse(input: &str) -> IResult<&str, (Instructions, HashMap<&str, Vec<&str>>)>
 
 fn parse_line(input: &str) -> IResult<&str, (&str, Vec<&str>)> {
     separated_pair(
-        alpha1,
+        alphanumeric1,
         tag(" = "),
         preceded(
             tag("("),
-            terminated(separated_list1(tag(", "), alpha1), tag(")")),
+            terminated(separated_list1(tag(", "), alphanumeric1), tag(")")),
         ),
     )(input)
 }
@@ -42,7 +43,39 @@ fn run_instructions(network: HashMap<&str, Vec<&str>>, instructions: Instruction
     let mut cur_instruction_index = 0;
     let mut steps = 0;
     while cur_node != TARGET_NODE {
-        dbg!(cur_instruction_index);
+        // if we reach the end of the instruction array we wrap around to the start
+        if cur_instruction_index >= instructions.len() {
+            cur_instruction_index = 0;
+        }
+        let cur_instruction = instructions[cur_instruction_index];
+        let left = network.get(cur_node).unwrap()[0];
+        let right = network.get(cur_node).unwrap()[1];
+        match cur_instruction {
+            'L' => {
+                cur_node = left;
+            }
+            'R' => {
+                cur_node = right;
+            }
+            _ => {
+                panic!("Invalid instruction: {}", cur_instruction);
+            }
+        }
+        steps += 1;
+        cur_instruction_index += 1;
+    }
+    steps
+}
+
+fn run_instructions_endswith(
+    network: &HashMap<&str, Vec<&str>>,
+    start_node: &str,
+    instructions: &Instructions,
+) -> usize {
+    let mut cur_node = start_node;
+    let mut cur_instruction_index = 0;
+    let mut steps = 0;
+    while !cur_node.ends_with("Z") {
         // if we reach the end of the instruction array we wrap around to the start
         if cur_instruction_index >= instructions.len() {
             cur_instruction_index = 0;
@@ -72,6 +105,24 @@ fn part1(input: &str) -> usize {
     run_instructions(network, instructions)
 }
 
+fn part2(input: &str) -> usize {
+    let (_, (instructions, network)) = parse(input).unwrap();
+    let start_nodes = &network
+        .keys()
+        .filter(|k| k.ends_with("A"))
+        .collect::<Vec<_>>();
+
+    let steps = start_nodes
+        .iter()
+        .map(|node| run_instructions_endswith(&network, node, &instructions))
+        .collect::<Vec<usize>>();
+
+    // get the lowest common multiple of all the steps
+    steps
+        .iter()
+        .fold(steps[0], |acc, &x| num::integer::lcm(acc, x))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,6 +142,17 @@ ZZZ = (ZZZ, ZZZ)"#;
 AAA = (BBB, BBB)
 BBB = (AAA, ZZZ)
 ZZZ = (ZZZ, ZZZ)"#;
+
+    static EXAMPLE3: &str = r#"LR
+
+11A = (11B, XXX)
+11B = (XXX, 11Z)
+11Z = (11B, XXX)
+22A = (22B, XXX)
+22B = (22C, 22C)
+22C = (22Z, 22Z)
+22Z = (22B, 22B)
+XXX = (XXX, XXX)"#;
 
     #[test]
     fn test_parse() {
@@ -138,5 +200,10 @@ ZZZ = (ZZZ, ZZZ)"#;
     fn test_part1() {
         assert_eq!(part1(EXAMPLE1), 2);
         assert_eq!(part1(EXAMPLE2), 6);
+    }
+
+    #[test]
+    fn test_part2() {
+        assert_eq!(part2(EXAMPLE3), 6);
     }
 }
