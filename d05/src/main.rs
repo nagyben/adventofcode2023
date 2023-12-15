@@ -1,3 +1,5 @@
+use std::{ops::Range, cmp::min};
+
 use nom::{
     bytes::complete::{tag, take_until},
     character::complete::{digit1, line_ending, multispace0, space1},
@@ -106,6 +108,30 @@ fn seed_to_location(seed: usize, lookups: &Vec<Vec<Lookup>>) -> usize {
             // else it stays the same as it was
         }
     }
+    mapped_value
+}
+
+fn seed_range_to_location(seed_range: Range<usize>, list_of_lookups: &Vec<Vec<Lookup>>) -> usize {
+    let mut next_ranges: Vec<Range<usize>> = vec![seed_range];
+    let mut current_ranges: Vec<Range<usize>> = vec![];
+    list_of_lookups.iter().for_each(|lookups|{
+        for j in 0..lookups.len() {
+            current_ranges = next_ranges;
+            next_ranges = vec![];
+            current_ranges.iter().for_each(|r: &Range<usize>| {
+                let before = r.start..min(r.end, lookups[j].destination_start);
+                let middle = max(r.start, lookups[j].)
+
+
+            });
+            // if the seed is within the range of the lookup then update it
+            if let Some(destination) = list_of_lookups[i][j].get_destination(mapped_value) {
+                mapped_value = destination;
+                break; // break out of the inner loop since we've found the destination
+            }
+            // else it stays the same as it was
+        }
+    });
     mapped_value
 }
 
