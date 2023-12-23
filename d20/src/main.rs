@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
+use dyn_clone::{clone_trait_object, DynClone};
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -12,6 +13,7 @@ use nom::{
 fn main() {
     let input = include_str!("../input.txt");
     println!("Part 1: {}", part1(input));
+    println!("Part 2: {}", part2(input));
 }
 
 #[derive(Clone)]
@@ -35,7 +37,7 @@ impl std::fmt::Debug for Pulse {
     }
 }
 
-trait PulseReceiver: std::fmt::Debug {
+trait PulseReceiver: std::fmt::Debug + DynClone {
     fn receive_pulse(&mut self, pulse: Pulse, pulse_queue: &mut VecDeque<Pulse>);
     fn targets(&self) -> &Vec<String>;
     fn id(&self) -> &String;
@@ -44,7 +46,9 @@ trait PulseReceiver: std::fmt::Debug {
     }
 }
 
-#[derive(Debug)]
+clone_trait_object!(PulseReceiver);
+
+#[derive(Debug, Clone)]
 struct FlipFlop {
     id: String,
     state: bool,
@@ -100,7 +104,7 @@ impl FlipFlop {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Conjunction {
     id: String,
     states: HashMap<String, bool>,
@@ -164,7 +168,7 @@ impl PulseReceiver for Conjunction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Broadcaster {
     id: String,
     targets: Vec<String>,
@@ -259,7 +263,7 @@ fn part1(input: &str) -> usize {
 
     for _ in 0..1000 {
         pulse_queue.push_back(Pulse {
-            source: "broadcaster".to_string(),
+            source: "button".to_string(),
             signal: false,
             target: "broadcaster".to_string(),
         });
@@ -274,6 +278,68 @@ fn part1(input: &str) -> usize {
     let high_pulses = pulse_history.iter().filter(|p| p.signal).count();
     let low_pulses = pulse_history.iter().filter(|p| !p.signal).count();
     high_pulses * low_pulses
+}
+
+fn part2(input: &str) -> usize {
+    let machines = parse(input);
+
+    // get the machines that have rx's parent as the target
+    // for my case it is &bq -> rx
+    let mut rx_parent: Option<String> = None;
+
+    for machine in machines.values() {
+        for target in machine.targets() {
+            if target == "bq" {
+                rx_parent = Some(machine.id().to_string());
+            }
+        }
+    }
+
+    assert!(rx_parent.is_some());
+
+    let mut rx_parents: Vec<String> = Vec::new();
+    for machine in machines.values() {
+        for target in machine.targets() {
+            if target == "bq" {
+                rx_parents.push(machine.id().to_string());
+            }
+        }
+    }
+
+    dbg!(&rx_parents);
+
+    let button_presses: Vec<usize> = rx_parents
+        .iter()
+        .map(|parent| {
+            let mut pulse_queue: VecDeque<Pulse> = VecDeque::new();
+            let mut pulse_history: Vec<Pulse> = Vec::new();
+            let mut button_presses = 0;
+            let mut machines = machines.clone();
+            'outer: loop {
+                pulse_queue.push_back(Pulse {
+                    source: "button".to_string(),
+                    signal: false,
+                    target: "broadcaster".to_string(),
+                });
+                button_presses += 1;
+                while !pulse_queue.is_empty() {
+                    let pulse = pulse_queue.pop_front().unwrap();
+                    if &pulse.target == parent && !pulse.signal {
+                        break 'outer;
+                    }
+                    pulse_history.push(pulse.clone());
+                    if let Some(machine) = machines.get_mut(&pulse.target) {
+                        machine.receive_pulse(pulse, &mut pulse_queue);
+                    }
+                }
+            }
+            button_presses
+        })
+        .collect();
+
+    button_presses
+        .iter()
+        .fold(1, |acc, x| num::integer::lcm(acc, *x))
 }
 
 #[cfg(test)]
